@@ -10,6 +10,7 @@ import '../models/employee_data.dart';
 import 'home_information.dart';
 import 'calendar_work_widgets.dart';
 import 'camera_page_widget.dart';
+import 'work_main_screen.dart';  // เพิ่มบรรทัดนี้
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -30,7 +31,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 1; // Default เริ่มที่ Home
 
-  // รายการหน้าต่างๆ
+  // รายการหน้าต่างๆ (ไม่รวม Work เพราะจะไป navigate แยก)
   late final List<Widget> _widgetOptions;
 
   @override
@@ -42,12 +43,27 @@ class _HomeScreenState extends State<HomeScreen> {
         user: widget.user,
         employeeData: widget.employeeData,
       ),
-      const WorkPageWidget(),
-      const CameraPageWidget(),
+      Container(), // placeholder สำหรับ Work (ไม่ได้ใช้)
+      CameraPageWidget(
+        user: widget.user,
+        employeeData: widget.employeeData,
+      ),
     ];
   }
 
   void _onItemTapped(int index) {
+    // ถ้ากดแท็บ "งาน" (index 2) ให้ไปหน้าใหม่
+    if (index == 2) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const WorkMainScreen(),
+        ),
+      );
+      return; // ออกจาก function ทันที
+    }
+    
+    // สำหรับแท็บอื่นๆ ให้ทำงานปกติ
     setState(() {
       _selectedIndex = index;
     });

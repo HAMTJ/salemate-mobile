@@ -1,3 +1,7 @@
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
+import '../services/image_service.dart';
+
 class Validators {
   // Username validation
   static String? validateUsername(String? value) {
@@ -103,4 +107,72 @@ class Validators {
     }
     return null;
   }
+
+  // Image validation for upload (ระบบป้องกัน 2 ชั้น)
+  static Future<ImageValidationResult> validateImageForUpload(String hash, String employeeCode) async {
+    try {
+      // ชั้นที่ 1: เช็คว่า hash นี้มาจากระบบเราหรือไม่
+      final prefs = await SharedPreferences.getInstance();
+      final pendingUploads = prefs.getStringList('pending_uploads') ?? [];
+      
+      bool foundInPending = false;
+      for (String uploadJson in pendingUploads) {
+        try {
+          final uploadData = jsonDecode(uploadJson);
+          if (uploadData['hash'] == hash) {
+            foundInPending = true;
+            break;
+          }
+        } catch (e) {
+          // ถ้า parse JSON ไม่ได้ ข้ามไป
+          continue;
+        }
+      }
+      
+      if (!foundInPending) {
+        return ImageValidationResult(
+          canUpload: false,
+          reason: 'รูปนี้ไม่ได้มาจากระบบถ่ายรูปของเรา',
+          errorCode: 'NOT_FROM_CAMERA',
+        );
+      }
+      
+      // ชั้นที่ 2: เช็ค hash ซ้ำใน server
+      final isDuplicate = await ImageService.checkDuplicateImage(hash, employeeCode);
+      
+      if (isDuplicate) {
+        return ImageValidationResult(
+          canUpload: false,
+          reason: 'รูปนี้เคยอัพโหลดในระบบแล้ว',
+          errorCode: 'DUPLICATE_HASH',
+        );
+      }
+      
+      return ImageValidationResult(
+        canUpload: true,
+        reason: 'พร้อมอัพโหลด',
+        errorCode: null,
+      );
+      
+    } catch (e) {
+      return ImageValidationResult(
+        canUpload: false,
+        reason: 'เกิดข้อผิดพลาดในการตรวจสอบ: $e',
+        errorCode: 'VALIDATION_ERROR',
+      );
+    }
+  }
+}
+
+// Class สำหรับผลลัพธ์การตรวจสอบรูปภาพ
+class ImageValidationResult {
+  final bool canUpload;
+  final String reason;
+  final String? errorCode;
+  
+  ImageValidationResult({
+    required this.canUpload,
+    required this.reason,
+    this.errorCode,
+  });
 }
