@@ -3,15 +3,29 @@ import 'dart:convert';
 
 class ImageApi {
   static const String baseUrl = 'http://192.168.1.225:4200';
-  static const String checkDuplicateEndpoint = '/api/images/check-duplicate';
-  static const String uploadImageEndpoint = '/api/keydata/v1.0/fnInsertNewImageHash'; // endpoint ใหม่
+  static const String checkDuplicateEndpoint = '/api/keydata/v1.0/fnCheckImagesHashCanUse';
+  static const String uploadImageEndpoint = '/api/keydata/v1.0/fnInsertNewImageHash';
 
-  // ตรวจสอบรูปซ้ำ
+  // ตรวจสอบรูปซ้ำ (API ใหม่)
   static Future<http.Response> checkDuplicateImage({
     required String fileHash,
-    required String employeeCode, // เปลี่ยนจาก int employeeId เป็น String employeeCode
+    required String employeeCode,
     String? authToken,
   }) async {
+    // แก้ request body ให้ตรงกับ API ใหม่
+    final requestBody = {
+      'imageHash': fileHash,        // แก้จาก 'file_hash'
+      'createHashBy': employeeCode, // แก้จาก 'employee_code'
+    };
+    
+    print('=== CHECK DUPLICATE API DEBUG ===');
+    print('URL: $baseUrl$checkDuplicateEndpoint');
+    print('Employee Code: $employeeCode');
+    print('Image Hash: ${fileHash.substring(0, 16)}...');
+    print('Request Body: ${jsonEncode(requestBody)}');
+    print('Has Auth Token: ${authToken != null}');
+    print('==================================');
+
     final response = await http.post(
       Uri.parse('$baseUrl$checkDuplicateEndpoint'),
       headers: {
@@ -19,22 +33,28 @@ class ImageApi {
         'Accept': 'application/json',
         if (authToken != null) 'Authorization': 'Bearer $authToken',
       },
-      body: jsonEncode({
-        'file_hash': fileHash,
-        'employee_code': employeeCode, // ใช้ employeeCode
-      }),
+      body: jsonEncode(requestBody),
     );
 
-    print('Check duplicate API - Status: ${response.statusCode}');
-    print('Check duplicate API - Body: ${response.body}');
+    print('=== CHECK DUPLICATE RESPONSE DEBUG ===');
+    print('Status Code: ${response.statusCode}');
+    print('Response Headers: ${response.headers}');
+    print('Response Body: ${response.body}');
+    
+    if (response.statusCode >= 400) {
+      print('❌ ERROR: HTTP ${response.statusCode}');
+    } else {
+      print('✅ SUCCESS: HTTP ${response.statusCode}');
+    }
+    print('======================================');
     
     return response;
   }
 
-  // อัพโหลดรูปภาพ
+  // อัพโหลดรูปภาพ (ส่ง hash เข้าระบบ)
   static Future<http.Response> uploadImage({
     required String fileHash,
-    required String employeeCode, // เปลี่ยนจาก parameters เยอะๆ เป็นแค่สิ่งที่จำเป็น
+    required String employeeCode,
     String? authToken,
   }) async {
     // Debug: แสดงข้อมูลที่ส่งไป

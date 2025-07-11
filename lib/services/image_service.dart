@@ -109,12 +109,12 @@ class ImageService {
     }
   }
 
-  // ตรวจสอบรูปซ้ำ
-  static Future<bool> checkDuplicateImage(String hash, String employeeCode) async {
+  // ตรวจสอบรูปซ้ำ (รองรับ API format ใหม่) - ส่งกลับ Map เพื่อให้ validator ตีความได้
+  static Future<Map<String, dynamic>?> checkDuplicateImage(String hash, String employeeCode) async {
     try {
       final response = await ImageApi.checkDuplicateImage(
         fileHash: hash,
-        employeeCode: employeeCode, // เปลี่ยนจาก employeeId เป็น employeeCode
+        employeeCode: employeeCode,
         // TODO: เพิ่ม authToken จาก user session
         // authToken: await _getAuthToken(),
       );
@@ -122,15 +122,52 @@ class ImageService {
       if (response.statusCode == 200) {
         final responseData = jsonDecode(response.body);
         
-        // TODO: ปรับ JSON structure ตาม API ที่น้อง backend เขียน
-        return responseData['is_duplicate'] ?? false;
+        // Parse response format: {"result": {"status": "success", "data": [{"ResultMessage": "...", "ResultStatus": 0}]}}
+        final result = responseData['result'];
+        if (result != null && result['status'] == 'success') {
+          final data = result['data'];
+          if (data != null && data is List && data.isNotEmpty) {
+            final resultMessage = data[0]['ResultMessage'] ?? '';
+            final resultStatus = data[0]['ResultStatus'];
+            
+            print('=== CHECK DUPLICATE RESULT ===');
+            print('Result Message: $resultMessage');
+            print('Result Status: $resultStatus');
+            print('==============================');
+            
+            // Return ข้อมูลเต็มให้ validator ตีความ
+            return {
+              'message': resultMessage,
+              'status': resultStatus,
+              'success': true,
+              'raw_response': responseData,
+            };
+          }
+        }
+        
+        return {
+          'message': 'ไม่สามารถตีความ response ได้',
+          'status': 'unknown',
+          'success': false,
+          'raw_response': responseData,
+        };
       } else {
         print('Check duplicate failed: ${response.statusCode}');
-        return false; // ถ้า API error ให้ผ่านไปก่อน
+        return {
+          'message': 'API Error: ${response.statusCode}',
+          'status': 'error',
+          'success': false,
+          'error_code': response.statusCode,
+        };
       }
     } catch (e) {
       print('Error checking duplicate: $e');
-      return false; // ถ้า network error ให้ผ่านไปก่อน
+      return {
+        'message': 'Network Error: $e',
+        'status': 'error',
+        'success': false,
+        'error': e.toString(),
+      };
     }
   }
 
@@ -138,7 +175,7 @@ class ImageService {
   static Future<ImageUploadResult> uploadImageToServer(
     String imagePath, 
     String hash, 
-    String employeeCode // เปลี่ยนจาก int employeeId เป็น String employeeCode
+    String employeeCode
   ) async {
     try {
       // ตรวจสอบก่อนอัพโหลด (ระบบป้องกัน 2 ชั้น)
@@ -154,7 +191,7 @@ class ImageService {
       
       final response = await ImageApi.uploadImage(
         fileHash: hash,
-        employeeCode: employeeCode, // ส่ง employeeCode
+        employeeCode: employeeCode,
         // TODO: เพิ่ม authToken จาก user session
         // authToken: await _getAuthToken(),
       );
@@ -202,7 +239,7 @@ class ImageService {
     final uploadData = {
       'hash': hash,
       'path': imagePath,
-      'employeeCode': employeeCode, // เพิ่ม employeeCode
+      'employeeCode': employeeCode,
       'timestamp': DateTime.now().toIso8601String(),
       'uploaded': false,
     };
@@ -231,7 +268,7 @@ class ImageService {
         final result = await uploadImageToServer(
           uploadData['path'],
           uploadData['hash'],
-          uploadData['employeeCode'] ?? 'unknown', // ใช้ employeeCode
+          uploadData['employeeCode'] ?? 'unknown',
         );
         
         if (!result.success) {

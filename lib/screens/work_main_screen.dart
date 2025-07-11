@@ -3,35 +3,20 @@ import 'package:google_fonts/google_fonts.dart';
 import '../widgets/glass_container.dart';
 import 'package:flutter/cupertino.dart';
 import 'brand_detail_screen.dart';
+import '../models/task_models.dart';
+import '../services/task_service.dart';
+import '../models/user.dart';
+import '../models/employee_data.dart';
 
-// Branch Model
-class Branch {
-  final int id;
-  final String name;
-  final String code;
-  final String address;
-  final String status;
-  final int totalBrands;
-  final int completedBrands;
-  final DateTime? lastVisit;
-
-  Branch({
-    required this.id,
-    required this.name,
-    required this.code,
-    required this.address,
-    required this.status,
-    required this.totalBrands,
-    required this.completedBrands,
-    this.lastVisit,
-  });
-
-  double get completionRate => totalBrands > 0 ? (completedBrands / totalBrands) * 100 : 0;
-}
-
-// Work Main Screen
 class WorkMainScreen extends StatefulWidget {
-  const WorkMainScreen({super.key});
+  final User? user;
+  final EmployeeData? employeeData;
+
+  const WorkMainScreen({
+    super.key,
+    this.user,
+    this.employeeData,
+  });
 
   @override
   State<WorkMainScreen> createState() => _WorkMainScreenState();
@@ -41,60 +26,107 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
   // Date selection state
   DateTime _selectedDate = DateTime.now();
   bool _isLoadingData = false;
+  bool _isInitialLoading = true;
 
-  // Mock data สำหรับสาขาต่างๆ
-  List<Branch> get _mockBranches => [
-    Branch(
-      id: 1,
-      name: 'WATSONS 890 สยามเซ็นเตอร์',
-      code: 'WT890',
-      address: 'ชั้น B1 สยามเซ็นเตอร์',
-      status: 'pending',
-      totalBrands: 3,
-      completedBrands: 1,
-      lastVisit: DateTime.now().subtract(Duration(days: 2)),
-    ),
-    Branch(
-      id: 2,
-      name: 'WATSONS 234 เซ็นทรัลเวิลด์',
-      code: 'WT234',
-      address: 'ชั้น G เซ็นทรัลเวิลด์',
-      status: 'in_progress',
-      totalBrands: 4,
-      completedBrands: 2,
-      lastVisit: DateTime.now().subtract(Duration(days: 1)),
-    ),
-    Branch(
-      id: 3,
-      name: 'WATSONS 156 เทอร์มินอล 21',
-      code: 'WT156',
-      address: 'ชั้น M เทอร์มินอล 21',
-      status: 'completed',
-      totalBrands: 2,
-      completedBrands: 2,
-      lastVisit: DateTime.now().subtract(Duration(hours: 6)),
-    ),
-    Branch(
-      id: 4,
-      name: 'WATSONS 445 เอ็มโพเรียม',
-      code: 'WT445',
-      address: 'ชั้น 1 เอ็มโพเรียม',
-      status: 'pending',
-      totalBrands: 5,
-      completedBrands: 0,
-      lastVisit: null,
-    ),
-    Branch(
-      id: 5,
-      name: 'WATSONS 178 ดิ เอ็มควอเทียร์',
-      code: 'WT178',
-      address: 'ชั้น G ดิ เอ็มควอเทียร์',
-      status: 'pending',
-      totalBrands: 3,
-      completedBrands: 0,
-      lastVisit: null,
-    ),
-  ];
+  // API Data
+  TaskData? _taskData;
+  String? _errorMessage;
+  List<Branch> _branchesForSelectedDate = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() {
+      _isInitialLoading = true;
+      _errorMessage = null;
+    });
+
+    await _loadTaskData();
+
+    if (mounted) {
+      setState(() {
+        _isInitialLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadTaskData() async {
+    final employeeCode = _getEmployeeCode();
+    
+    if (employeeCode == null) {
+      setState(() {
+        _errorMessage = 'ไม่พบข้อมูลพนักงาน กรุณาเข้าสู่ระบบใหม่';
+      });
+      return;
+    }
+
+    try {
+      print('🔄 Loading task data for: $employeeCode');
+      
+      final result = await TaskService.getTasks(
+        employeeCode: employeeCode,
+        // TODO: ใส่ authToken ถ้ามี
+        // authToken: await _getAuthToken(),
+      );
+
+      if (result.isSuccess && result.data != null) {
+        setState(() {
+          _taskData = result.data;
+          _errorMessage = null;
+        });
+        
+        // Load data for selected date
+        await _loadDataForSelectedDate();
+        
+      } else {
+        setState(() {
+          _errorMessage = result.message;
+          _taskData = null;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading task data: $e');
+      setState(() {
+        _errorMessage = 'เกิดข้อผิดพลาด: ${e.toString()}';
+      });
+    }
+  }
+
+  Future<void> _loadDataForSelectedDate() async {
+    if (_taskData == null) return;
+
+    setState(() {
+      _isLoadingData = true;
+    });
+
+    try {
+      // Get tasks for selected date from cached data
+      final groupedData = _taskData!.getGroupedByDate();
+      final selectedDateKey = _formatDateKey(_selectedDate);
+      final locationsForDate = groupedData[selectedDateKey] ?? [];
+      
+      // Convert to Branch objects for existing UI
+      final branches = TaskService.convertToBranchList(locationsForDate, _selectedDate);
+      
+      setState(() {
+        _branchesForSelectedDate = branches;
+        _isLoadingData = false;
+      });
+      
+      print('📅 Loaded ${branches.length} branches for ${_formatDateThai(_selectedDate)}');
+      
+    } catch (e) {
+      print('❌ Error loading data for selected date: $e');
+      setState(() {
+        _isLoadingData = false;
+        _errorMessage = 'เกิดข้อผิดพลาดในการโหลดข้อมูลวันที่เลือก';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -121,23 +153,11 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
               
               // Content
               Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Work Status Summary
-                      _buildWorkStatusSummary(),
-                      
-                      const SizedBox(height: 20),
-                      
-                      // Branch Tasks List with Date Selector
-                      _buildBranchTasksList(),
-                      
-                      const SizedBox(height: 20),
-                    ],
-                  ),
-                ),
+                child: _isInitialLoading
+                    ? _buildInitialLoading()
+                    : _errorMessage != null
+                        ? _buildErrorState()
+                        : _buildContent(),
               ),
             ],
           ),
@@ -159,31 +179,18 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            'งานของฉัน',
-            style: GoogleFonts.inter(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
+          Expanded(
+            child: Text(
+              'งานของฉัน',
+              style: GoogleFonts.inter(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
             ),
           ),
-          const Spacer(),
           IconButton(
-            onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Row(
-                    children: [
-                      Icon(Icons.refresh, color: Colors.white),
-                      SizedBox(width: 8),
-                      Text('รีเฟรชข้อมูลแล้ว'),
-                    ],
-                  ),
-                  backgroundColor: Colors.blue.shade600,
-                  duration: Duration(seconds: 2),
-                ),
-              );
-            },
+            onPressed: _refreshData,
             icon: Icon(
               Icons.refresh,
               color: Colors.black87,
@@ -194,11 +201,131 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
     );
   }
 
+  Widget _buildInitialLoading() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.orange.shade600),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'กำลังโหลดข้อมูลงาน...',
+            style: GoogleFonts.inter(
+              fontSize: 16,
+              color: Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: GlassContainer(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.error_outline,
+                size: 64,
+                color: Colors.red.shade400,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'เกิดข้อผิดพลาด',
+                style: GoogleFonts.inter(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Show detailed error message
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
+                ),
+                child: Text(
+                  _errorMessage!,
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    color: Colors.red.shade700,
+                  ),
+                  textAlign: TextAlign.left,
+                ),
+              ),
+              const SizedBox(height: 8),
+              // Show employee code being used
+              if (_getEmployeeCode() != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: Text(
+                    'Employee Code: ${_getEmployeeCode()}',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.blue.shade700,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 20),
+              ElevatedButton.icon(
+                onPressed: _refreshData,
+                icon: Icon(Icons.refresh),
+                label: Text('ลองใหม่'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange.shade600,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Work Status Summary
+          _buildWorkStatusSummary(),
+          
+          const SizedBox(height: 20),
+          
+          // Branch Tasks List with Date Selector
+          _buildBranchTasksList(),
+          
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWorkStatusSummary() {
-    final totalBranches = _mockBranches.length;
-    final completedBranches = _mockBranches.where((b) => b.status == 'completed').length;
-    final inProgressBranches = _mockBranches.where((b) => b.status == 'in_progress').length;
-    final pendingBranches = _mockBranches.where((b) => b.status == 'pending').length;
+    if (_taskData == null) {
+      return _buildEmptySummary();
+    }
+
+    final summary = TaskService.getSummary(_taskData!);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,7 +344,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'สาขาทั้งหมด',
-                count: '$totalBranches',
+                count: '${summary.totalLocations}',
                 color: Colors.blue,
                 icon: Icons.store,
               ),
@@ -225,10 +352,10 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildStatusCard(
-                title: 'กำลังดำเนินการ',
-                count: '$inProgressBranches',
+                title: 'งานทั้งหมด',
+                count: '${summary.totalTasks}',
                 color: Colors.orange,
-                icon: Icons.pending_actions,
+                icon: Icons.work,
               ),
             ),
           ],
@@ -239,7 +366,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'รอดำเนินการ',
-                count: '$pendingBranches',
+                count: '${summary.pendingTasks}',
                 color: Colors.red,
                 icon: Icons.schedule,
               ),
@@ -248,12 +375,41 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'เสร็จแล้ว',
-                count: '$completedBranches',
+                count: '${summary.completedTasks}',
                 color: Colors.green,
                 icon: Icons.check_circle,
               ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptySummary() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'สรุปภาพรวม',
+          style: GoogleFonts.inter(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassContainer(
+          padding: const EdgeInsets.all(24),
+          child: Center(
+            child: Text(
+              'ไม่มีข้อมูลสำหรับแสดงสรุป',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                color: Colors.black54,
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -325,13 +481,13 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
           )
         else ...[
           // Branch cards
-          ..._mockBranches.map((branch) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: _buildBranchCard(branch),
-          )).toList(),
-          
-          // No data message for other dates (example)
-          if (!_isToday() && _mockBranches.length < 3)
+          if (_branchesForSelectedDate.isNotEmpty) ...[
+            ..._branchesForSelectedDate.map((branch) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _buildBranchCard(branch),
+            )).toList(),
+          ] else ...[
+            // No data message
             GlassContainer(
               padding: const EdgeInsets.all(24),
               child: Column(
@@ -343,7 +499,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'งานน้อยกว่าปกติ',
+                    'ไม่มีงานในวันที่เลือก',
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
@@ -361,6 +517,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
                 ],
               ),
             ),
+          ],
         ],
       ],
     );
@@ -503,16 +660,8 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
       onTap: () {
         setState(() {
           _selectedDate = targetDate;
-          _isLoadingData = true;
         });
-        
-        Future.delayed(Duration(milliseconds: 300), () {
-          if (mounted) {
-            setState(() {
-              _isLoadingData = false;
-            });
-          }
-        });
+        _loadDataForSelectedDate();
       },
       borderRadius: BorderRadius.circular(8),
       child: Container(
@@ -681,8 +830,27 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
     );
   }
 
-  void _onBranchTap(Branch branch) {
-    Navigator.push(
+  void _onBranchTap(Branch branch) async {
+    // Get the original tasks for this branch from API data
+    List<Task> tasks = [];
+    
+    if (_taskData != null) {
+      final groupedData = _taskData!.getGroupedByDate();
+      final selectedDateKey = _formatDateKey(_selectedDate);
+      final locationsForDate = groupedData[selectedDateKey] ?? [];
+      
+      // Find the location that matches this branch
+      for (var location in locationsForDate) {
+        if (location.storeNameThai == branch.name && 
+            location.accountNameEnglish == branch.code) {
+          tasks = location.tasks;
+          break;
+        }
+      }
+    }
+
+    // Navigate และรอรับผลลัพธ์กลับมา
+    final result = await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => BrandDetailScreen(
@@ -691,101 +859,183 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             name: branch.name,
             code: branch.code,
             selectedDate: _selectedDate,
+            tasks: tasks, // ส่ง tasks จริงจาก API
           ),
+          user: widget.user,
+          employeeData: widget.employeeData,
+        ),
+      ),
+    );
+    
+    // ถ้ามีการอัพเดทข้อมูล ให้เรียก API ใหม่เพื่อดึงข้อมูลล่าสุด
+    if (result == true) {
+      print('🔄 Refreshing task data after key data completion...');
+      
+      // แสดง loading snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              SizedBox(width: 12),
+              Text('กำลังอัพเดทข้อมูล...'),
+            ],
+          ),
+          backgroundColor: Colors.blue.shade600,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      
+      // เรียก API ใหม่เพื่อดึงข้อมูลล่าสุดจาก server
+      await _loadTaskData();
+      
+      // แสดงข้อความสำเร็จ
+      if (mounted && _errorMessage == null) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Text('อัพเดทข้อมูลเสร็จสิ้น'),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
+  // Event handlers
+  void _changeDate(int days) {
+    setState(() {
+      _selectedDate = _selectedDate.add(Duration(days: days));
+    });
+    _loadDataForSelectedDate();
+  }
+
+  void _selectDate() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        height: 300,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
+                  ),
+                  Text(
+                    'เลือกวันที่',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _loadDataForSelectedDate();
+                    },
+                    child: Text('เสร็จ', style: TextStyle(color: Colors.blue)),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: CupertinoDatePicker(
+                mode: CupertinoDatePickerMode.date,
+                initialDateTime: _selectedDate,
+                minimumDate: DateTime.now().subtract(Duration(days: 30)),
+                maximumDate: DateTime.now().add(Duration(days: 30)),
+                onDateTimeChanged: (DateTime date) {
+                  setState(() {
+                    _selectedDate = date;
+                  });
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Date methods
-  void _changeDate(int days) {
-    setState(() {
-      _selectedDate = _selectedDate.add(Duration(days: days));
-      _isLoadingData = true;
-    });
-    
-    // Simulate API call
-    Future.delayed(Duration(milliseconds: 500), () {
-      if (mounted) {
-        setState(() {
-          _isLoadingData = false;
-        });
-      }
-    });
+  Future<void> _refreshData() async {
+    // Show loading snackbar
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 12),
+            Text('กำลังรีเฟรชข้อมูล...'),
+          ],
+        ),
+        backgroundColor: Colors.blue.shade600,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Clear cache and reload
+    TaskService.clearCache();
+    await _loadTaskData();
+
+    // Show success message
+    if (mounted && _errorMessage == null) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 8),
+              Text('รีเฟรชข้อมูลเสร็จสิ้น'),
+            ],
+          ),
+          backgroundColor: Colors.green.shade600,
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
   }
 
-void _selectDate() async {
-  showModalBottomSheet(
-    context: context,
-    backgroundColor: Colors.transparent,
-    builder: (context) => Container(
-      height: 300,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text('ยกเลิก', style: TextStyle(color: Colors.grey)),
-                ),
-                Text(
-                  'เลือกวันที่',
-                  style: GoogleFonts.inter(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    setState(() {
-                      _isLoadingData = true;
-                    });
-                    Future.delayed(Duration(milliseconds: 500), () {
-                      if (mounted) {
-                        setState(() {
-                          _isLoadingData = false;
-                        });
-                      }
-                    });
-                  },
-                  child: Text('เสร็จ', style: TextStyle(color: Colors.blue)),
-                ),
-              ],
-            ),
-          ),
-          // Date picker
-          Expanded(
-            child: CupertinoDatePicker(
-              mode: CupertinoDatePickerMode.date,
-              initialDateTime: _selectedDate,
-              minimumDate: DateTime.now().subtract(Duration(days: 30)),
-              maximumDate: DateTime.now().add(Duration(days: 30)),
-              onDateTimeChanged: (DateTime date) {
-                setState(() {
-                  _selectedDate = date;
-                });
-              },
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
   // Helper methods
+  String? _getEmployeeCode() {
+    return widget.employeeData?.employeeCode ?? 
+           widget.user?.username;
+  }
+
   bool _isToday() {
     final now = DateTime.now();
     return _isSameDay(_selectedDate, now);
@@ -810,6 +1060,10 @@ void _selectDate() async {
     } else {
       return _formatDateThai(_selectedDate);
     }
+  }
+
+  String _formatDateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
   String _formatDateThai(DateTime date) {

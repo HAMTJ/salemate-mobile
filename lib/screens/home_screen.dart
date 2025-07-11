@@ -57,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => const WorkMainScreen(),
+          builder: (context) => WorkMainScreen(
+            user: widget.user,
+            employeeData: widget.employeeData,
+          ),
         ),
       );
       return; // ออกจาก function ทันที
