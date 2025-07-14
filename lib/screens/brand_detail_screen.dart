@@ -26,6 +26,7 @@ class BrandDetailScreen extends StatefulWidget {
 class _BrandDetailScreenState extends State<BrandDetailScreen> {
   // Track which tasks have been completed (for UI state management)
   Set<String> _completedTaskKeys = {};
+  bool _hasDataChanged = false; // Track ว่ามีการเปลี่ยนแปลงไหม
 
   @override
   void initState() {
@@ -106,7 +107,13 @@ class _BrandDetailScreenState extends State<BrandDetailScreen> {
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.pop(context, true), // ส่งสัญญาณกลับว่ามีการเปลี่ยนแปลง
+            onPressed: () {
+              // ส่งข้อมูล completed tasks กลับไป
+              Navigator.pop(context, {
+                'hasChanges': _hasDataChanged,
+                'completedTasks': _completedTaskKeys,
+              });
+            },
             icon: Icon(
               Icons.arrow_back_ios,
               color: Colors.black87,
@@ -695,6 +702,7 @@ class _BrandDetailScreenState extends State<BrandDetailScreen> {
         // อัพเดท local state
         setState(() {
           _completedTaskKeys.add(_getTaskKey(task));
+          _hasDataChanged = true; // มีการเปลี่ยนแปลง
         });
         
         ScaffoldMessenger.of(context).showSnackBar(

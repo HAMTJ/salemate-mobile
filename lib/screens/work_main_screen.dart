@@ -32,6 +32,9 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
   TaskData? _taskData;
   String? _errorMessage;
   List<Branch> _branchesForSelectedDate = [];
+  
+  // Track completed tasks locally (sync กับ brand_detail_screen)
+  Set<String> _localCompletedTasks = {};
 
   @override
   void initState() {
@@ -109,8 +112,35 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
       final selectedDateKey = _formatDateKey(_selectedDate);
       final locationsForDate = groupedData[selectedDateKey] ?? [];
       
-      // Convert to Branch objects for existing UI
-      final branches = TaskService.convertToBranchList(locationsForDate, _selectedDate);
+      // Convert to Branch objects และ update completion count ตาม local state
+      final branches = locationsForDate.asMap().entries.map((entry) {
+        final index = entry.key;
+        final location = entry.value;
+        
+        // นับ completed tasks รวม API + local state
+        int completedCount = 0;
+        for (var task in location.tasks) {
+          final taskKey = '${task.brandName}_${task.quotationShareSubNo}';
+          if (task.isCompleted || _localCompletedTasks.contains(taskKey)) {
+            completedCount++;
+          }
+        }
+        
+        // สร้าง Branch พร้อม updated completion count
+        final originalBranch = Branch.fromTaskLocation(location, index + 1, _selectedDate);
+        return Branch(
+          id: originalBranch.id,
+          name: originalBranch.name,
+          code: originalBranch.code,
+          address: originalBranch.address,
+          status: completedCount == location.totalTasks ? 'completed' : 
+                  completedCount > 0 ? 'in_progress' : 'pending',
+          totalBrands: originalBranch.totalBrands,
+          completedBrands: completedCount, // ใช้ค่าที่คำนวณใหม่
+          lastVisit: originalBranch.lastVisit,
+          selectedDate: originalBranch.selectedDate,
+        );
+      }).toList();
       
       setState(() {
         _branchesForSelectedDate = branches;
@@ -325,7 +355,29 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
       return _buildEmptySummary();
     }
 
-    final summary = TaskService.getSummary(_taskData!);
+    // คำนวณ summary รวม local completed tasks
+    final allDates = _taskData!.getAllDates();
+    
+    int totalLocations = 0;
+    int totalTasks = 0;
+    int completedTasks = 0;
+    
+    for (var date in allDates) {
+      for (var location in date.locations) {
+        totalLocations++;
+        totalTasks += location.totalTasks;
+        
+        // นับ completed tasks รวม API + local state
+        for (var task in location.tasks) {
+          final taskKey = '${task.brandName}_${task.quotationShareSubNo}';
+          if (task.isCompleted || _localCompletedTasks.contains(taskKey)) {
+            completedTasks++;
+          }
+        }
+      }
+    }
+    
+    final pendingTasks = totalTasks - completedTasks;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,7 +396,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'สาขาทั้งหมด',
-                count: '${summary.totalLocations}',
+                count: '$totalLocations',
                 color: Colors.blue,
                 icon: Icons.store,
               ),
@@ -353,7 +405,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'งานทั้งหมด',
-                count: '${summary.totalTasks}',
+                count: '$totalTasks',
                 color: Colors.orange,
                 icon: Icons.work,
               ),
@@ -366,7 +418,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'รอดำเนินการ',
-                count: '${summary.pendingTasks}',
+                count: '$pendingTasks',
                 color: Colors.red,
                 icon: Icons.schedule,
               ),
@@ -375,7 +427,7 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
             Expanded(
               child: _buildStatusCard(
                 title: 'เสร็จแล้ว',
-                count: '${summary.completedTasks}',
+                count: '$completedTasks',
                 color: Colors.green,
                 icon: Icons.check_circle,
               ),
@@ -867,52 +919,33 @@ class _WorkMainScreenState extends State<WorkMainScreen> {
       ),
     );
     
-    // ถ้ามีการอัพเดทข้อมูล ให้เรียก API ใหม่เพื่อดึงข้อมูลล่าสุด
-    if (result == true) {
-      print('🔄 Refreshing task data after key data completion...');
+    // ถ้ามีการอัพเดทข้อมูล ให้ sync local state
+    if (result is Map<String, dynamic> && result['hasChanges'] == true) {
+      final completedTaskKeys = result['completedTasks'] as Set<String>? ?? {};
       
-      // แสดง loading snackbar
+      print('🔄 Syncing completed tasks: ${completedTaskKeys.length} items');
+      
+      setState(() {
+        _localCompletedTasks.addAll(completedTaskKeys);
+      });
+      
+      // รีเฟรช UI ด้วยข้อมูลใหม่
+      await _loadDataForSelectedDate();
+      
+      // แสดงข้อความสำเร็จ
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              ),
-              SizedBox(width: 12),
-              Text('กำลังอัพเดทข้อมูล...'),
+              Icon(Icons.sync, color: Colors.white),
+              SizedBox(width: 8),
+              Text('ข้อมูลได้รับการอัพเดทแล้ว'),
             ],
           ),
-          backgroundColor: Colors.blue.shade600,
-          duration: Duration(seconds: 3),
+          backgroundColor: Colors.green.shade600,
+          duration: Duration(seconds: 2),
         ),
       );
-      
-      // เรียก API ใหม่เพื่อดึงข้อมูลล่าสุดจาก server
-      await _loadTaskData();
-      
-      // แสดงข้อความสำเร็จ
-      if (mounted && _errorMessage == null) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 8),
-                Text('อัพเดทข้อมูลเสร็จสิ้น'),
-              ],
-            ),
-            backgroundColor: Colors.green.shade600,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
     }
   }
 
