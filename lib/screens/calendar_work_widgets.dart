@@ -1,481 +1,455 @@
+// lib/screens/calendar_work_widgets.dart
+// ⚠️ แทนที่ไฟล์เดิมทั้งหมด
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/glass_container.dart';
+import '../widgets/calendar/smart_calendar.dart';
+import '../widgets/calendar/calendar_models.dart';
+import '../widgets/common/floating_quick_actions.dart';
+import '../models/task_models.dart';
+import '../models/user.dart';
+import '../models/employee_data.dart';
+import '../services/task_service.dart';
+import 'work_main_screen.dart';
 
-// Calendar Screen Widget
-class CalendarPageWidget extends StatelessWidget {
-  const CalendarPageWidget({super.key});
+class CalendarPageWidget extends StatefulWidget {
+  final User? user;
+  final EmployeeData? employeeData;
+
+  const CalendarPageWidget({
+    super.key,
+    this.user,
+    this.employeeData,
+  });
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'ปฏิทินงาน',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
+  State<CalendarPageWidget> createState() => _CalendarPageWidgetState();
+}
+
+class _CalendarPageWidgetState extends State<CalendarPageWidget> {
+  CalendarViewMode _currentViewMode = CalendarViewMode.month;
+  TaskData? _taskData;
+  Map<DateTime, CalendarDayData> _calendarData = {};
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTaskData();
+  }
+
+  Future<void> _loadTaskData() async {
+    final employeeCode = _getEmployeeCode();
+    
+    if (employeeCode == null) {
+      setState(() {
+        _errorMessage = 'ไม่พบข้อมูลพนักงาน กรุณาเข้าสู่ระบบใหม่';
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      print('🔄 Loading task data for calendar: $employeeCode');
+      
+      final result = await TaskService.getTasks(
+        employeeCode: employeeCode,
+      );
+
+      if (result.isSuccess && result.data != null) {
+        setState(() {
+          _taskData = result.data;
+          _calendarData = _convertTaskDataToCalendarData(result.data!);
+          _errorMessage = null;
+          _isLoading = false;
+        });
+        
+        print('✅ Calendar data loaded: ${_calendarData.length} days');
+        
+      } else {
+        setState(() {
+          _errorMessage = result.message;
+          _taskData = null;
+          _calendarData = {};
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error loading calendar data: $e');
+      setState(() {
+        _errorMessage = 'เกิดข้อผิดพลาด: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
+  }
+
+  Map<DateTime, CalendarDayData> _convertTaskDataToCalendarData(TaskData taskData) {
+    Map<DateTime, CalendarDayData> result = {};
+    
+    for (var workType in taskData.workTypes) {
+      for (var workingDate in workType.dates) {
+        final date = DateTime(
+          workingDate.workingDate.year,
+          workingDate.workingDate.month,
+          workingDate.workingDate.day,
+        );
+        
+        // Aggregate data for this date
+        int totalTasks = 0;
+        int completedTasks = 0;
+        List<String> highlights = [];
+        
+        for (var location in workingDate.locations) {
+          totalTasks += location.totalTasks;
+          // 🔥 แก้ไขการนับ completed tasks
+          for (var task in location.tasks) {
+            if (task.isCompleted) {
+              completedTasks++;
+            }
+          }
           
-          // Mini Calendar
-          _buildMiniCalendar(),
-          
-          const SizedBox(height: 16),
-          
-          // Today's Events
-          _buildTodayEvents(),
-          
-          const SizedBox(height: 20),
-        ],
+          // Add location name as highlight if has work
+          if (location.totalTasks > 0) {
+            highlights.add(location.storeNameThai);
+          }
+        }
+        
+        // Determine status color
+        Color statusColor;
+        if (completedTasks == totalTasks && totalTasks > 0) {
+          statusColor = Colors.green; // All completed
+        } else if (completedTasks > 0) {
+          statusColor = Colors.orange; // In progress
+        } else if (totalTasks > 0) {
+          statusColor = Colors.red; // Not started
+        } else {
+          statusColor = Colors.grey; // No work
+        }
+        
+        result[date] = CalendarDayData(
+          date: date,
+          totalTasks: totalTasks,
+          completedTasks: completedTasks,
+          hasWork: totalTasks > 0,
+          highlights: highlights,
+          statusColor: statusColor,
+        );
+      }
+    }
+    
+    return result;
+  }
+
+  void _handleDateSelected(DateTime date) {
+    // Navigate to work screen for selected date
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WorkMainScreen(
+          user: widget.user,
+          employeeData: widget.employeeData,
+          initialDate: date, // Pass selected date
+        ),
       ),
     );
   }
 
-  Widget _buildMiniCalendar() {
-    return GlassContainer(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          // Calendar Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.chevron_left),
-              ),
-              Text(
-                'มิถุนายน 2568',
+  void _handleQuickAction(DateTime date, QuickActionType action) {
+    switch (action) {
+      case QuickActionType.doubleTap:
+        _handleDateSelected(date);
+        break;
+      case QuickActionType.longPress:
+        // Note dialog is handled automatically by SmartCalendar
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _handleNoteSaved(DateTime date, String note) {
+    // TODO: Save to SharedPreferences or backend
+    print('📝 Note saved for ${date.toIso8601String()}: $note');
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.check, color: Colors.white),
+            SizedBox(width: 8),
+            Text('บันทึกโน้ตเรียบร้อย'),
+          ],
+        ),
+        backgroundColor: Colors.green.shade600,
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _handleRefresh() {
+    _loadTaskData();
+  }
+
+  void _jumpToToday() {
+    // Calendar will handle jumping to today
+  }
+
+  void _changeViewMode() {
+    setState(() {
+      switch (_currentViewMode) {
+        case CalendarViewMode.month:
+          _currentViewMode = CalendarViewMode.week;
+          break;
+        case CalendarViewMode.week:
+          _currentViewMode = CalendarViewMode.year;
+          break;
+        case CalendarViewMode.year:
+          _currentViewMode = CalendarViewMode.month;
+          break;
+      }
+    });
+  }
+
+  String? _getEmployeeCode() {
+    return widget.employeeData?.employeeCode ?? 
+           widget.user?.username;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // Main content
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Page Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                'ปฏิทินงาน',
                 style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
                   color: Colors.black87,
                 ),
               ),
-              IconButton(
-                onPressed: () {},
-                icon: const Icon(Icons.chevron_right),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Days of week
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
-                .map((day) => Text(
-                      day,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.black54,
+            ),
+            
+            // Error message
+            if (_errorMessage != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: GlassContainer(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        color: Colors.red.shade600,
                       ),
-                    ))
-                .toList(),
-          ),
-          
-          const SizedBox(height: 8),
-          
-          // Calendar Grid (Sample)
-          _buildCalendarGrid(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalendarGrid() {
-    return Column(
-      children: List.generate(5, (weekIndex) {
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(7, (dayIndex) {
-              final day = weekIndex * 7 + dayIndex - 5; // Sample calculation
-              final isToday = day == 30;
-              final hasEvent = [3, 7, 15, 22, 28].contains(day);
-              
-              if (day < 1 || day > 30) {
-                return const SizedBox(width: 32, height: 32);
-              }
-              
-              return Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: isToday 
-                      ? Colors.orange.shade600
-                      : hasEvent 
-                          ? Colors.orange.shade100
-                          : Colors.transparent,
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '$day',
-                    style: GoogleFonts.inter(
-                      fontSize: 12,
-                      fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
-                      color: isToday 
-                          ? Colors.white
-                          : hasEvent 
-                              ? Colors.orange.shade700
-                              : Colors.black87,
-                    ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _errorMessage!,
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.red.shade700,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _loadTaskData,
+                        child: Text('ลองใหม่'),
+                      ),
+                    ],
                   ),
                 ),
-              );
-            }),
-          ),
-        );
-      }),
-    );
-  }
-
-  Widget _buildTodayEvents() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'นัดหมายวันนี้',
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
-        
-        _buildEventCard(
-          time: '09:00',
-          title: 'ประชุมทีมขาย',
-          subtitle: 'ห้องประชุมใหญ่',
-          color: Colors.blue,
-        ),
-        
-        const SizedBox(height: 8),
-        
-        _buildEventCard(
-          time: '14:00',
-          title: 'พบลูกค้า ABC Company',
-          subtitle: 'ออฟฟิศลูกค้า',
-          color: Colors.green,
-        ),
-        
-        const SizedBox(height: 8),
-        
-        _buildEventCard(
-          time: '16:30',
-          title: 'ติดตามโครงการ',
-          subtitle: 'โทรศัพท์',
-          color: Colors.orange,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildEventCard({
-    required String time,
-    required String title,
-    required String subtitle,
-    required Color color,
-  }) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Text(
-              time,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
               ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.black87,
-                  ),
-                ),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: Colors.black54,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Icon(
-            Icons.chevron_right,
-            color: Colors.black54,
-            size: 18,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Work Screen Widget
-class WorkPageWidget extends StatelessWidget {
-  const WorkPageWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'งานของฉัน',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 16),
-          
-          // Work Status Summary
-          _buildWorkStatusSummary(),
-          
-          const SizedBox(height: 16),
-          
-          // Active Tasks
-          _buildActiveTasks(),
-          
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildWorkStatusSummary() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildStatusCard(
-            title: 'งานทั้งหมด',
-            count: '24',
-            color: Colors.blue,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatusCard(
-            title: 'กำลังดำเนินการ',
-            count: '8',
-            color: Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildStatusCard(
-            title: 'เสร็จแล้ว',
-            count: '16',
-            color: Colors.green,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusCard({
-    required String title,
-    required String count,
-    required Color color,
-  }) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        children: [
-          Text(
-            count,
-            style: GoogleFonts.inter(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            title,
-            style: GoogleFonts.inter(
-              fontSize: 10,
-              color: Colors.black54,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActiveTasks() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'งานที่ต้องทำ',
-          style: GoogleFonts.inter(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: Colors.black87,
-          ),
-        ),
-        const SizedBox(height: 12),
-        
-        _buildTaskCard(
-          title: 'ติดตามลูกค้า ABC Company',
-          description: 'โทรสอบถามความคืบหน้าการสั่งซื้อ',
-          priority: 'สูง',
-          dueDate: 'วันนี้',
-          status: 'กำลังดำเนินการ',
-          priorityColor: Colors.red,
-        ),
-        
-        const SizedBox(height: 8),
-        
-        _buildTaskCard(
-          title: 'เตรียมเอกสารเสนอราคา',
-          description: 'สำหรับลูกค้า XYZ Corporation',
-          priority: 'ปานกลาง',
-          dueDate: 'พรุ่งนี้',
-          status: 'รอดำเนินการ',
-          priorityColor: Colors.orange,
-        ),
-        
-        const SizedBox(height: 8),
-        
-        _buildTaskCard(
-          title: 'ประชุมทบทวนยอดขาย Q2',
-          description: 'สรุปผลการขายไตรมาส 2',
-          priority: 'ต่ำ',
-          dueDate: '3 วัน',
-          status: 'รอดำเนินการ',
-          priorityColor: Colors.green,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTaskCard({
-    required String title,
-    required String description,
-    required String priority,
-    required String dueDate,
-    required String status,
-    required Color priorityColor,
-  }) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
+              SizedBox(height: 16),
+            ],
+            
+            // Loading indicator
+            if (_isLoading) ...[
               Expanded(
-                child: Text(
-                  title,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text(
+                        'กำลังโหลดข้อมูลปฏิทิน...',
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: priorityColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  priority,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: priorityColor,
+            ]
+            // Calendar
+            else ...[
+              Expanded(
+                child: SmartCalendar(
+                  initialDate: DateTime.now(),
+                  initialViewMode: _currentViewMode,
+                  calendarData: _calendarData,
+                  config: CalendarConfig(
+                    enableQuickActions: true,
+                    enableHeatMap: true,
+                    enablePersonalNotes: true,
+                    enableSwipeGestures: true,
+                    enablePinchZoom: false, // 🔥 ปิด pinch zoom
+                    primaryColor: Colors.orange.shade600,
+                    completedColor: Colors.green,
+                    pendingColor: Colors.orange,
+                    todayColor: Colors.blue.shade600,
                   ),
+                  onDateSelected: _handleDateSelected,
+                  onQuickAction: _handleQuickAction,
+                  onNoteSaved: _handleNoteSaved,
+                  onRefreshRequested: _handleRefresh,
+                  showHeader: true,
+                  enableInteractions: true,
                 ),
               ),
             ],
-          ),
-          
-          const SizedBox(height: 8),
-          
-          Text(
-            description,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: Colors.black54,
+            
+            // Summary footer
+            if (!_isLoading && _errorMessage == null) ...[
+              _buildSummaryFooter(),
+            ],
+          ],
+        ),
+        
+        // Floating Actions - ปิดใช้งาน
+        // Positioned(
+        //   bottom: 20,
+        //   right: 20,
+        //   child: FloatingQuickActions(
+        //     onTodayPressed: _jumpToToday,
+        //     onRefreshPressed: _handleRefresh,
+        //     onCalendarMode: _changeViewMode,
+        //     primaryColor: Colors.orange.shade600,
+        //   ),
+        // ),
+      ],
+    );
+  }
+
+  Widget _buildSummaryFooter() {
+    // Calculate summary stats
+    int totalDaysWithWork = 0;
+    int totalTasks = 0;
+    int completedTasks = 0;
+    
+    for (var dayData in _calendarData.values) {
+      if (dayData.hasWork) {
+        totalDaysWithWork++;
+        totalTasks += dayData.totalTasks;
+        completedTasks += dayData.completedTasks;
+      }
+    }
+    
+    final completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: GlassContainer(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Expanded(
+              child: _buildSummaryItem(
+                icon: Icons.calendar_today,
+                label: 'วันที่มีงาน',
+                value: '$totalDaysWithWork วัน',
+                color: Colors.blue.shade600,
+              ),
             ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          Row(
-            children: [
-              const Icon(
-                Icons.schedule,
-                size: 14,
-                color: Colors.black45,
+            Container(
+              width: 1,
+              height: 40,
+              color: Colors.grey.shade300,
+            ),
+            Expanded(
+              child: _buildSummaryItem(
+                icon: Icons.task_alt,
+                label: 'ความคืบหน้า',
+                value: '${completionRate.toStringAsFixed(0)}%',
+                color: completionRate > 80 ? Colors.green : Colors.orange,
               ),
-              const SizedBox(width: 4),
-              Text(
-                'ครบกำหนด: $dueDate',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  color: Colors.black45,
-                ),
+            ),
+            Container(
+              width: 1,
+              height: 40,
+              color: Colors.grey.shade300,
+            ),
+            Expanded(
+              child: _buildSummaryItem(
+                icon: Icons.assignment,
+                label: 'งานทั้งหมด',
+                value: '$totalTasks งาน',
+                color: Colors.purple.shade600,
               ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: status == 'กำลังดำเนินการ' 
-                      ? Colors.blue.withOpacity(0.1)
-                      : Colors.grey.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  status,
-                  style: GoogleFonts.inter(
-                    fontSize: 9,
-                    color: status == 'กำลังดำเนินการ' 
-                        ? Colors.blue.shade700
-                        : Colors.black54,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  Widget _buildSummaryItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(
+          icon,
+          color: color,
+          size: 20,
+        ),
+        SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.inter(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: GoogleFonts.inter(
+            fontSize: 11,
+            color: Colors.black54,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  String _getViewModeLabel() {
+    switch (_currentViewMode) {
+      case CalendarViewMode.week:
+        return 'มุมมองสัปดาห์';
+      case CalendarViewMode.month:
+        return 'มุมมองเดือน';
+      case CalendarViewMode.year:
+        return 'มุมมองปี';
+    }
   }
 }

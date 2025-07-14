@@ -38,7 +38,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _widgetOptions = [
-      const CalendarPageWidget(),
+      CalendarPageWidget(
+        user: widget.user,
+        employeeData: widget.employeeData,
+
+      ),
       HomeInformationWidget(
         user: widget.user,
         employeeData: widget.employeeData,
