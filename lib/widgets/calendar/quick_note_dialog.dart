@@ -33,14 +33,12 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
   bool _isLoading = false;
   final FocusNode _focusNode = FocusNode();
 
-  // Quick note templates
+  // Quick note templates - ข้อความสั้นๆ เล็กๆ
   final List<String> _quickTemplates = [
-    '✅ งานเสร็จเรียบร้อย',
-    '⏰ ต้องติดตาม',
-    '❗ สำคัญ',
-    '📝 บันทึกเพิ่มเติม',
-    '🚀 ทำได้ดีมาก',
-    '⚠️ มีปัญหา',
+    '✅ เสร็จ',
+    '📋 ติดตาม', 
+    '⚠️ ปัญหา',
+    '💡 หมายเหตุ',
   ];
 
   @override
@@ -69,10 +67,8 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
       curve: Curves.easeOut,
     ));
 
-    // Start animation
     _animationController.forward();
     
-    // Auto focus after animation
     Future.delayed(const Duration(milliseconds: 300), () {
       _focusNode.requestFocus();
     });
@@ -94,7 +90,6 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
 
     setState(() => _isLoading = true);
     
-    // Simulate save delay for better UX
     await Future.delayed(const Duration(milliseconds: 500));
     
     widget.onSave?.call(widget.date, _textController.text.trim());
@@ -107,7 +102,6 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
   void _handleDelete() async {
     setState(() => _isLoading = true);
     
-    // Simulate delete delay
     await Future.delayed(const Duration(milliseconds: 300));
     
     widget.onDelete?.call();
@@ -146,22 +140,35 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
             scale: _scaleAnimation.value,
             child: Dialog(
               backgroundColor: Colors.transparent,
-              child: GlassContainer(
-                padding: const EdgeInsets.all(0),
-                child: Container(
-                  constraints: const BoxConstraints(
-                    maxWidth: 400,
-                    maxHeight: 500,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildHeader(),
-                      _buildContent(),
-                      _buildActions(),
-                    ],
-                  ),
-                ),
+              insetPadding: EdgeInsets.all(16), // 🔥 เพิ่ม insetPadding
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final maxWidth = constraints.maxWidth;
+                  final maxHeight = constraints.maxHeight;
+                  
+                  return Center(
+                    child: Container(
+                      width: (maxWidth - 32).clamp(280.0, 380.0), // 🔥 ปรับขนาด
+                      constraints: BoxConstraints(
+                        maxHeight: maxHeight - 100, // 🔥 เผื่อพื้นที่ด้านล่าง
+                      ),
+                      child: Material( // 🔥 เพิ่ม Material wrapper
+                        type: MaterialType.transparency,
+                        child: GlassContainer(
+                          padding: const EdgeInsets.all(0),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildHeader(),
+                              Flexible(child: _buildContent()), // 🔥 เปลี่ยนจาก Expanded เป็น Flexible
+                              _buildActions(),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
@@ -172,7 +179,7 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16), // 🔥 ลดจาก 20 เป็น 16
       decoration: BoxDecoration(
         color: Colors.orange.shade50,
         borderRadius: const BorderRadius.only(
@@ -183,7 +190,7 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6), // 🔥 ลดจาก 8 เป็น 6
             decoration: BoxDecoration(
               color: Colors.orange.shade100,
               borderRadius: BorderRadius.circular(8),
@@ -191,10 +198,10 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
             child: Icon(
               Icons.note_add,
               color: Colors.orange.shade700,
-              size: 20,
+              size: 18, // 🔥 ลดจาก 20 เป็น 18
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10), // 🔥 ลดจาก 12 เป็น 10
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,7 +209,7 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
                 Text(
                   'บันทึกส่วนตัว',
                   style: GoogleFonts.inter(
-                    fontSize: 16,
+                    fontSize: 15, // 🔥 ลดจาก 16 เป็น 15
                     fontWeight: FontWeight.bold,
                     color: Colors.black87,
                   ),
@@ -210,7 +217,7 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
                 Text(
                   ThaiCalendarUtils.formatThaiDate(widget.date),
                   style: GoogleFonts.inter(
-                    fontSize: 12,
+                    fontSize: 11, // 🔥 ลดจาก 12 เป็น 11
                     color: Colors.black54,
                   ),
                 ),
@@ -222,8 +229,10 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
             icon: Icon(
               Icons.close,
               color: Colors.black54,
-              size: 20,
+              size: 18, // 🔥 ลดจาก 20 เป็น 18
             ),
+            padding: EdgeInsets.zero, // 🔥 ลด padding
+            constraints: BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
       ),
@@ -231,95 +240,92 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
   }
 
   Widget _buildContent() {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Text input
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: TextField(
-                controller: _textController,
-                focusNode: _focusNode,
-                maxLines: 4,
-                maxLength: 200,
-                decoration: InputDecoration(
-                  hintText: 'เพิ่มบันทึกสำหรับวันนี้...',
-                  hintStyle: GoogleFonts.inter(
-                    color: Colors.grey.shade500,
-                    fontSize: 14,
-                  ),
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.all(16),
-                  counterStyle: GoogleFonts.inter(
-                    fontSize: 11,
-                    color: Colors.grey.shade400,
-                  ),
-                ),
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  color: Colors.black87,
-                ),
-              ),
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Text input
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-            
-            const SizedBox(height: 16),
-            
-            // Quick templates
-            Text(
-              'เทมเพลตด่วน',
+            child: TextField(
+              controller: _textController,
+              focusNode: _focusNode,
+              maxLines: 3,
+              maxLength: 200,
+              decoration: InputDecoration(
+                hintText: 'เพิ่มบันทึกสำหรับวันนี้...',
+                hintStyle: GoogleFonts.inter(
+                  color: Colors.grey.shade500,
+                  fontSize: 13,
+                ),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.all(12),
+                counterStyle: GoogleFonts.inter(
+                  fontSize: 10,
+                  color: Colors.grey.shade400,
+                ),
+              ),
               style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.black54,
+                fontSize: 13,
+                color: Colors.black87,
               ),
             ),
-            
-            const SizedBox(height: 8),
-            
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _quickTemplates.map((template) {
-                return GestureDetector(
-                  onTap: () => _insertTemplate(template),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade50,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.blue.shade200),
-                    ),
-                    child: Text(
-                      template,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
+          ),
+          
+          const SizedBox(height: 12),
+          
+          // Quick templates
+          Text(
+            'ข้อความสำเร็จรูป',
+            style: GoogleFonts.inter(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.black54,
+            ),
+          ),
+          
+          const SizedBox(height: 6),
+          
+          // 🔥 ใช้ Wrap แบบในรูป - เรียงในแถวเดียว
+          Wrap(
+            spacing: 8, // ระยะห่างระหว่างปุ่ม
+            runSpacing: 6,
+            children: _quickTemplates.map((template) {
+              return GestureDetector(
+                onTap: () => _insertTemplate(template),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200, width: 1),
+                  ),
+                  child: Text(
+                    template,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: Colors.orange.shade700,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                );
-              }).toList(),
-            ),
-          ],
-        ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildActions() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16), // 🔥 ลดจาก 20 เป็น 16
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius: const BorderRadius.only(
@@ -336,16 +342,16 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
                 onPressed: _isLoading ? null : _handleDelete,
                 icon: _isLoading
                     ? SizedBox(
-                        width: 16,
-                        height: 16,
+                        width: 14, // 🔥 ลดจาก 16 เป็น 14
+                        height: 14,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Icon(Icons.delete, size: 16),
-                label: Text('ลบ'),
+                    : Icon(Icons.delete, size: 14), // 🔥 ลดจาก 16 เป็น 14
+                label: Text('ลบ', style: GoogleFonts.inter(fontSize: 13)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.red.shade600,
                   side: BorderSide(color: Colors.red.shade300),
-                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 10), // 🔥 ลดจาก 12 เป็น 10
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -354,7 +360,7 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
             ),
           
           if (widget.existingNote != null && widget.existingNote!.isNotEmpty)
-            const SizedBox(width: 12),
+            const SizedBox(width: 10), // 🔥 ลดจาก 12 เป็น 10
           
           // Cancel button
           Expanded(
@@ -363,19 +369,19 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.black54,
                 side: BorderSide(color: Colors.grey.shade300),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10), // 🔥 ลดจาก 12 เป็น 10
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
               child: Text(
                 'ยกเลิก',
-                style: GoogleFonts.inter(fontWeight: FontWeight.w500),
+                style: GoogleFonts.inter(fontWeight: FontWeight.w500, fontSize: 13),
               ),
             ),
           ),
           
-          const SizedBox(width: 12),
+          const SizedBox(width: 10), // 🔥 ลดจาก 12 เป็น 10
           
           // Save button
           Expanded(
@@ -384,19 +390,20 @@ class _QuickNoteDialogState extends State<QuickNoteDialog>
               onPressed: _isLoading ? null : _handleSave,
               icon: _isLoading
                   ? SizedBox(
-                      width: 16,
-                      height: 16,
+                      width: 14, // 🔥 ลดจาก 16 เป็น 14
+                      height: 14,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : Icon(Icons.save, size: 16),
-              label: Text(_isLoading ? 'กำลังบันทึก...' : 'บันทึก'),
+                  : Icon(Icons.save, size: 14), // 🔥 ลดจาก 16 เป็น 14
+              label: Text(_isLoading ? 'กำลังบันทึก...' : 'บันทึก', 
+                style: GoogleFonts.inter(fontSize: 13)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange.shade600,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 10), // 🔥 ลดจาก 12 เป็น 10
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),

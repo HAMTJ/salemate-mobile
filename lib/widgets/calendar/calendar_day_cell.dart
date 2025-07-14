@@ -101,9 +101,12 @@ class _CalendarDayCellState extends State<CalendarDayCell>
             onTapCancel: _handleTapCancel,
             onTap: () {
               _handleTapUp();
-              widget.onTap?.call();
+              // 🔥 ลบ widget.onTap?.call(); ออก - ไม่ให้ single tap ทำอะไร
             },
-            onDoubleTap: widget.onDoubleTap,
+            onDoubleTap: () {
+              // 🔥 เฉพาะ double tap เท่านั้นที่จะทำงาน
+              widget.onDoubleTap?.call();
+            },
             onLongPress: () {
               // Add haptic feedback for long press
               if (widget.config.enablePersonalNotes) {
@@ -169,91 +172,68 @@ class _CalendarDayCellState extends State<CalendarDayCell>
           child: Text(
             '${date.day}',
             style: GoogleFonts.inter(
-              fontSize: 16, // 🔥 เพิ่มขนาดจาก 14 เป็น 16
-              fontWeight: widget.isToday ? FontWeight.bold : FontWeight.w600, // 🔥 เพิ่ม weight
+              fontSize: 16,
+              fontWeight: widget.isToday ? FontWeight.bold : FontWeight.w600,
               color: _getTextColor(dayData),
             ),
           ),
         ),
 
-        // Task indicators - ลดขนาดลง
+        // 🔥 แสดงเฉพาะจุดสถานะงานหลักที่สวยขึ้น
         if (dayData != null && dayData.hasWork) ...[
-          // Progress indicator (top right) - ทำให้เล็กลง
-          if (dayData.totalTasks > 0)
-            Positioned(
-              top: 1, // 🔥 ลดจาก 2 เป็น 1
-              right: 1, // 🔥 ลดจาก 2 เป็น 1
-              child: _buildProgressIndicator(dayData),
-            ),
-
-          // Personal note indicator (bottom left) - ทำให้เล็กลง
-          if (dayData.personalNote != null && dayData.personalNote!.isNotEmpty)
-            Positioned(
-              bottom: 1, // 🔥 ลดจาก 2 เป็น 1
-              left: 1, // 🔥 ลดจาก 2 เป็น 1
-              child: Container(
-                width: 4, // 🔥 ลดจาก 6 เป็น 4
-                height: 4, // 🔥 ลดจาก 6 เป็น 4
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade600,
-                  shape: BoxShape.circle,
-                ),
+          Positioned(
+            top: 2,
+            right: 2,
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: getImprovedStatusColor(dayData),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: getImprovedStatusColor(dayData).withOpacity(0.4),
+                    blurRadius: 2,
+                    offset: Offset(0, 1),
+                  ),
+                ],
               ),
             ),
-
-          // Highlight indicator (bottom right) - ทำให้เล็กลง
-          if (dayData.highlights.isNotEmpty)
-            Positioned(
-              bottom: 1, // 🔥 ลดจาก 2 เป็น 1
-              right: 1, // 🔥 ลดจาก 2 เป็น 1
-              child: Container(
-                width: 4, // 🔥 ลดจาก 6 เป็น 4
-                height: 4, // 🔥 ลดจาก 6 เป็น 4
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade600,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ),
+          ),
         ],
+        
+        // Personal note indicator - ย้ายมาข้างล่าง
+        if (dayData != null && dayData.personalNote != null && dayData.personalNote!.isNotEmpty)
+          Positioned(
+            bottom: 2,
+            left: 2,
+            child: Container(
+              width: 3,
+              height: 3,
+              decoration: BoxDecoration(
+                color: Colors.blue.shade400,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildProgressIndicator(CalendarDayData dayData) {
+  Color getImprovedStatusColor(CalendarDayData dayData) {
+    if (!dayData.hasWork) return Colors.grey.shade400;
+    
     final completionRate = dayData.completionRate;
     
-    // For small cells, show smaller colored dot
-    if ((widget.size ?? 40) < 50) {
-      return Container(
-        width: 6, // 🔥 ลดจาก 8 เป็น 6
-        height: 6, // 🔥 ลดจาก 8 เป็น 6
-        decoration: BoxDecoration(
-          color: dayData.getStatusColor(),
-          shape: BoxShape.circle,
-        ),
-      );
+    if (completionRate >= 100) {
+      return Colors.green.shade500; // ✅ เสร็จสิ้น
+    } else if (completionRate >= 50) {
+      return Colors.amber.shade500; // 🔄 กำลังดำเนินการ (มากกว่าครึ่ง)
+    } else if (completionRate > 0) {
+      return Colors.orange.shade500; // 🟠 เริ่มแล้ว (น้อยกว่าครึ่ง)
+    } else {
+      return Colors.red.shade400; // ❌ ยังไม่เริ่ม
     }
-
-    // For larger cells, show mini progress bar
-    return Container(
-      width: 10, // 🔥 ลดจาก 12 เป็น 10
-      height: 2, // 🔥 ลดจาก 3 เป็น 2
-      decoration: BoxDecoration(
-        color: Colors.grey.shade300,
-        borderRadius: BorderRadius.circular(1),
-      ),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: completionRate / 100,
-        child: Container(
-          decoration: BoxDecoration(
-            color: dayData.getStatusColor(),
-            borderRadius: BorderRadius.circular(1),
-          ),
-        ),
-      ),
-    );
   }
 
   Color _getTextColor(CalendarDayData? dayData) {
@@ -265,7 +245,6 @@ class _CalendarDayCellState extends State<CalendarDayCell>
       return Colors.grey.shade400;
     }
 
-    // 🔥 ปรับปรุงการเลือกสี - ให้เห็นเลขชัดเจนขึ้น
-    return Colors.black87; // ใช้สีเดียวเพื่อให้เห็นชัดเจน
+    return Colors.black87;
   }
 }
