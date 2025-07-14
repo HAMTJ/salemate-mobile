@@ -76,16 +76,11 @@ class _CalendarHeaderState extends State<CalendarHeader>
           child: Opacity(
             opacity: _slideAnimation.value,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               child: Column(
                 children: [
                   _buildMainHeader(),
-                  // 🔥 ลบ view mode toggle ออก
-                  // if (widget.showViewModeToggle) ...[
-                  //   const SizedBox(height: 12),
-                  //   _buildViewModeToggle(),
-                  // ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   _buildDaysOfWeekHeader(),
                 ],
               ),
@@ -97,238 +92,161 @@ class _CalendarHeaderState extends State<CalendarHeader>
   }
 
   Widget _buildMainHeader() {
-    return Row(
-      children: [
-        // Previous month button
-        _buildNavigationButton(
-          icon: Icons.chevron_left,
-          onPressed: () {
-            _animateMonthChange();
-            widget.onPreviousMonth?.call();
-          },
-        ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isNarrowScreen = screenWidth < 350;
         
-        const SizedBox(width: 12),
-        
-        // Month/Year display
-        Expanded(
-          child: GestureDetector(
-            onTap: widget.onTodayPressed,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade200),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    _getHeaderTitle(),
-                    style: GoogleFonts.inter(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                    textAlign: TextAlign.center,
+        return Row(
+          children: [
+            // Previous month button - ปรับขนาดตามหน้าจอ
+            _buildNavigationButton(
+              icon: Icons.chevron_left,
+              onPressed: () {
+                _animateMonthChange();
+                widget.onPreviousMonth?.call();
+              },
+              compact: isNarrowScreen,
+            ),
+            
+            const SizedBox(width: 8),
+            
+            // Month/Year display - ใช้ Expanded และปรับ padding
+            Expanded(
+              child: GestureDetector(
+                onTap: widget.onTodayPressed,
+                child: Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isNarrowScreen ? 8 : 12,
+                    vertical: 10,
                   ),
-                  if (widget.viewMode != CalendarViewMode.year) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      _getSubtitle(),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: Center(
+                    child: Text(
+                      _getHeaderTitle(),
                       style: GoogleFonts.inter(
-                        fontSize: 12,
-                        color: Colors.black54,
+                        fontSize: isNarrowScreen ? 16 : 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
                       textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
                     ),
-                  ],
-                ],
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        
-        const SizedBox(width: 12),
-        
-        // Next month button
-        _buildNavigationButton(
-          icon: Icons.chevron_right,
-          onPressed: () {
-            _animateMonthChange();
-            widget.onNextMonth?.call();
-          },
-        ),
-        
-        // Today button
-        if (widget.showTodayButton) ...[
-          const SizedBox(width: 8),
-          _buildTodayButton(),
-        ],
-      ],
+            
+            const SizedBox(width: 8),
+            
+            // Next month button
+            _buildNavigationButton(
+              icon: Icons.chevron_right,
+              onPressed: () {
+                _animateMonthChange();
+                widget.onNextMonth?.call();
+              },
+              compact: isNarrowScreen,
+            ),
+            
+            // Today button - แยกออกมาและปรับขนาด
+            if (widget.showTodayButton) ...[
+              const SizedBox(width: 6),
+              _buildTodayButton(compact: isNarrowScreen),
+            ],
+          ],
+        );
+      },
     );
   }
 
   Widget _buildNavigationButton({
     required IconData icon,
     required VoidCallback? onPressed,
+    bool compact = false,
   }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(compact ? 8 : 10),
           decoration: BoxDecoration(
             color: Colors.blue.shade50,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.blue.shade200),
           ),
           child: Icon(
             icon,
             color: Colors.blue.shade700,
-            size: 20,
+            size: compact ? 18 : 20,
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTodayButton() {
+  Widget _buildTodayButton({bool compact = false}) {
     final isToday = ThaiCalendarUtils.isToday(widget.currentDate);
     
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: widget.onTodayPressed,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(6),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: compact ? 6 : 8,
+            vertical: compact ? 6 : 8,
+          ),
           decoration: BoxDecoration(
             color: isToday 
                 ? Colors.green.shade100 
                 : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(
               color: isToday 
                   ? Colors.green.shade300 
                   : Colors.grey.shade300,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isToday ? Icons.today : Icons.calendar_today,
-                size: 16,
-                color: isToday 
-                    ? Colors.green.shade700 
-                    : Colors.grey.shade600,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'วันนี้',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
+          child: compact 
+              ? Icon(
+                  isToday ? Icons.today : Icons.calendar_today,
+                  size: 16,
                   color: isToday 
                       ? Colors.green.shade700 
                       : Colors.grey.shade600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildViewModeToggle() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _buildViewModeButton(
-            CalendarViewMode.week,
-            'สัปดาห์',
-            Icons.view_week,
-          ),
-          _buildViewModeButton(
-            CalendarViewMode.month,
-            'เดือน',
-            Icons.calendar_view_month,
-          ),
-          _buildViewModeButton(
-            CalendarViewMode.year,
-            'ปี',
-            Icons.calendar_view_day,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildViewModeButton(
-    CalendarViewMode mode,
-    String label,
-    IconData icon,
-  ) {
-    final isSelected = widget.viewMode == mode;
-    
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => widget.onViewModeChanged?.call(mode),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-            decoration: BoxDecoration(
-              color: isSelected 
-                  ? Colors.white 
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+                )
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isToday ? Icons.today : Icons.calendar_today,
+                      size: 14,
+                      color: isToday 
+                          ? Colors.green.shade700 
+                          : Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'วันนี้',
+                      style: GoogleFonts.inter(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isToday 
+                            ? Colors.green.shade700 
+                            : Colors.grey.shade600,
                       ),
-                    ]
-                  : null,
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: isSelected 
-                      ? widget.config.primaryColor 
-                      : Colors.grey.shade600,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 4),
-                Text(
-                  label,
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: isSelected 
-                        ? widget.config.primaryColor 
-                        : Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
       ),
     );
