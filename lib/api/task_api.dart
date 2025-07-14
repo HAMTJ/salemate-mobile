@@ -80,18 +80,26 @@ class TaskApi {
     required String employeeCode,
     required String quotationShareSubNo,
     required String brandName,
+    required String workType,
+    required int checkInOutID,
     String? authToken,
   }) async {
     final requestBody = {
       'employeeCode': employeeCode,
       'quotationShareSubNo': quotationShareSubNo,
       'brandName': brandName,
+      'workType': workType,
+      'actionType': 1, // Fix 1 คือคีย์ยอดแล้ว
+      'updatedBy': employeeCode, // รหัสพนักงานที่คีย์ยอด
+      'checkInOutID': checkInOutID,
     };
     
     print('=== UPDATE KEY DATA STATUS DEBUG ===');
     print('URL: $baseUrl$updateKeyDataEndpoint');
     print('Employee Code: $employeeCode');
     print('Brand: $brandName');
+    print('Work Type: $workType');
+    print('CheckInOutID: $checkInOutID');
     print('Quotation: $quotationShareSubNo');
     print('Request Body: ${jsonEncode(requestBody)}');
     print('Has Auth Token: ${authToken != null}');

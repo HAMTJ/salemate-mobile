@@ -101,10 +101,11 @@ class WorkType {
   });
 
   factory WorkType.fromJson(Map<String, dynamic> json) {
+    final workTypeName = json['workType'] ?? '';
     return WorkType(
-      workType: json['workType'] ?? '',
+      workType: workTypeName,
       dates: (json['dates'] as List? ?? [])
-          .map((date) => WorkingDate.fromJson(date))
+          .map((date) => WorkingDate.fromJson(date, workType: workTypeName)) // ส่ง workType ลงไป
           .toList(),
     );
   }
@@ -120,11 +121,11 @@ class WorkingDate {
     required this.locations,
   });
 
-  factory WorkingDate.fromJson(Map<String, dynamic> json) {
+  factory WorkingDate.fromJson(Map<String, dynamic> json, {required String workType}) {
     return WorkingDate(
       workingDate: DateTime.parse(json['workingDate']),
       locations: (json['locations'] as List? ?? [])
-          .map((location) => Location.fromJson(location))
+          .map((location) => Location.fromJson(location, workType: workType)) // ส่ง workType ต่อ
           .toList(),
     );
   }
@@ -142,12 +143,12 @@ class Location {
     required this.tasks,
   });
 
-  factory Location.fromJson(Map<String, dynamic> json) {
+  factory Location.fromJson(Map<String, dynamic> json, {required String workType}) {
     return Location(
       accountNameEnglish: json['accountNameEnglish'] ?? '',
       storeNameThai: json['storeNameThai'] ?? '',
       tasks: (json['tasks'] as List? ?? [])
-          .map((task) => Task.fromJson(task))
+          .map((task) => Task.fromJson(task, workType: workType)) // ส่ง workType ไปด้วย
           .toList(),
     );
   }
@@ -180,6 +181,8 @@ class Task {
   final String visitStatusColor;
   final dynamic keyDataStatus; // เปลี่ยนเป็น dynamic เพื่อรองรับ null และ int
   final String keyDataStatusWording;
+  final int? checkInOutID; // เพิ่ม checkInOutID
+  final String workType; // เพิ่ม workType
 
   Task({
     required this.brandName,
@@ -189,9 +192,11 @@ class Task {
     required this.visitStatusColor,
     this.keyDataStatus,
     required this.keyDataStatusWording,
+    this.checkInOutID, // เพิ่ม checkInOutID
+    required this.workType, // เพิ่ม workType
   });
 
-  factory Task.fromJson(Map<String, dynamic> json) {
+  factory Task.fromJson(Map<String, dynamic> json, {required String workType}) {
     return Task(
       brandName: json['brandName'] ?? '',
       quotationShareSubNo: json['quotationShareSubNo'] ?? '',
@@ -200,6 +205,8 @@ class Task {
       visitStatusColor: json['visitStatusColor'] ?? '',
       keyDataStatus: json['keyDataStatus'], // รับค่าเป็น dynamic
       keyDataStatusWording: json['keyDataStatusWording'] ?? '',
+      checkInOutID: json['checkInOutID'], // เพิ่ม checkInOutID
+      workType: workType, // ส่งมาจาก parent parsing
     );
   }
 

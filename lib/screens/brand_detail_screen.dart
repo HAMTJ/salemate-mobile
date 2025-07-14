@@ -656,6 +656,16 @@ class _BrandDetailScreenState extends State<BrandDetailScreen> {
       return;
     }
 
+    if (task.checkInOutID == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('ไม่พบข้อมูล checkInOutID'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     // แสดง loading
     showDialog(
       context: context,
@@ -668,10 +678,13 @@ class _BrandDetailScreenState extends State<BrandDetailScreen> {
     try {
       print('🔄 Updating key data status...');
       
+      // ใช้ workType จาก task แทน hardcode
       final result = await TaskService.updateKeyDataStatus(
         employeeCode: employeeCode,
         quotationShareSubNo: task.quotationShareSubNo,
         brandName: task.brandName,
+        workType: task.workType, // ✅ ใช้จาก task
+        checkInOutID: task.checkInOutID!,
         // TODO: เพิ่ม authToken ถ้าจำเป็น
       );
 

@@ -141,15 +141,19 @@ class TaskService {
     required String employeeCode,
     required String quotationShareSubNo,
     required String brandName,
+    required String workType,
+    required int checkInOutID,
     String? authToken,
   }) async {
     try {
-      print('🔄 TaskService: Updating key data status for $brandName');
+      print('🔄 TaskService: Updating key data status for $brandName (workType: $workType, checkInOutID: $checkInOutID)');
       
       final response = await TaskApi.updateKeyDataStatus(
         employeeCode: employeeCode,
         quotationShareSubNo: quotationShareSubNo,
         brandName: brandName,
+        workType: workType,
+        checkInOutID: checkInOutID,
         authToken: authToken,
       );
       
